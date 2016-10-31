@@ -114,7 +114,7 @@ def run_task(gpu_info_file, args):
                                          preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))
 
                     # The second Ctrl-C kill the subprocess
-                    signal.signal(signal.SIGINT, lambda signum, frame: stop_subprocess(p))
+                    signal.signal(signal.SIGINT, lambda signum, frame: stop_subprocess(p, gpu_info_file, free_gpu))
 
                     set_additional_info(gpu_info_file, free_gpu, os.getlogin(), task,
                                         p.pid, get_formated_dt(dt_before), cuda)
@@ -145,7 +145,7 @@ def run_task(gpu_info_file, args):
             handle_io_error(e)
 
 
-def stop_subprocess(process):
+def stop_subprocess(process, gpu_file, gpu_to_release):
     """
     This function take care of the Ctrl-C signal.
     On the first Ctrl-C the warning is printed.
@@ -167,19 +167,23 @@ def stop_subprocess(process):
 
     if TASK_SIGNAL is KILL:
         print("\nThe task (PID: {}) was killed.".format(process.pid))
+        set_free_gpu(gpu_file, gpu_to_release)
         pgrp = os.getpgid(process.pid)
         os.killpg(pgrp, signal.SIGKILL)
 
+    # currently this branch is not used, in future, create new process group
+    # for the subprocess
     elif TASK_SIGNAL is TERMINATE:
         print("\nThe task (PID: {}) was terminated.".format(process.pid))
+        set_free_gpu(gpu_file, gpu_to_release)
         pgrp = os.getpgid(process.pid)
         os.killpg(pgrp, signal.SIGTERM)
         check_process_liveness(process, KILL_DELAY_SEC)
         TASK_SIGNAL = None
 
     elif TASK_SIGNAL is WARN:
-        print("\nNext Ctrl-C terminate the task (PID: {}).".format(process.pid))
-        TASK_SIGNAL = TERMINATE
+        print("\nNext Ctrl-C kill the task (PID: {}).".format(process.pid))
+        TASK_SIGNAL = KILL
 
 
 def check_forced_free(gpu_indices, forced):
