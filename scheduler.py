@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 
-# ignore this line
-# !/home/jan/anaconda2/envs/python3/bin/python3
-
 import argparse
 import json
 import time
@@ -59,6 +56,8 @@ def get_args():
                         help="Wait until specified GPU is free.")
     parser.add_argument("-s", "--status", action='store_true',
                         help="Show info about GPU usage - user/GPU/taskPID/start")
+    parser.add_argument("-rg", "--release_gpu", type=int, nargs='+',
+                        help="Releases GPUs according their indices. e.g -rg 0 2 will release GPU 0 and 2.")
     parser.add_argument("task", nargs='?',
                         help="The quoted task with arguments which will be started on free GPUs as soon as possible.")
     return parser.parse_args()
@@ -333,15 +332,6 @@ def validate_args(args):
         print("Usage of multiple GPUs isn't supported yet. You must use just the one GPU for the task.")
         sys.exit(1)
 
-    if args.gpu_count > get_gpu_total_count(f):
-        print("Not enough GPUs for this task, use --init for setting GPUs count or change --gpu_count option.")
-        sys.exit(2)
-
-
-@seek_to_start
-def get_gpu_total_count(f):
-    return len(json.load(f))
-
 
 @seek_to_start
 def display_status(f):
@@ -383,6 +373,9 @@ if __name__ == '__main__':
 
         if args.init:
             init_gpu_info_file(f, args.init[0], args.init[1:])
+
+        if args.release_gpu:
+            set_free_gpu(f, args.release_gpu)
 
         if args.status:
             display_status(f)
