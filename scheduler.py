@@ -245,7 +245,7 @@ def init_gpu_info_file(f, gpu_count, occupied_gpu):
     data[GPU_TASK_PID] = init_to_none(gpu_count)
     data[GPU_TASK_START] = init_to_none(gpu_count)
     data[GPU_NAME] = init_to_none(gpu_count)
-    json.dump(data, f)
+    json.dump(data, f, indent=4, sort_keys=True)
 
 
 @seek_to_start
@@ -272,7 +272,7 @@ def update_gpu_info(f, release_gpu, indices,
             gpu_data[GPU_TASK_START][i] = start
             gpu_data[GPU_NAME][i] = gpu_name
 
-    json.dump(gpu_data, f)
+    json.dump(gpu_data, f, indent=4, sort_keys=True)
 
 
 @access_gpu_file
