@@ -1,6 +1,6 @@
 #!/bin/sh
 
-../scheduler.py "./pgtest"
-#../scheduler.py "./test1.py --portshift __num__ -f 2 -opt 2"
+#../scheduler.py "./pgtest"
+../scheduler.py "./test1.py `cat setup`" -v
 #../scheduler.py "./test2.py -f 1 -opt 1 --port __num__"
 

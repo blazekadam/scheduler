@@ -11,6 +11,7 @@ import os
 import sys
 import signal
 import threading
+import shlex
 
 # CONSTANTS - Scheduler settings
 SEC_DELAY = 3
@@ -102,14 +103,16 @@ def run_task(gpu_info_file, args):
 
                     dt_before = datetime.datetime.now()
 
+                    # parse string of args to list
+                    task = prepare_args(args.task)
+
                     # replace char '#' with port number
-                    task = insert_portshift(args.task, free_gpu[0])
+                    task = insert_portshift(task, free_gpu[0])
 
                     # run required task
                     p = subprocess.Popen(task,
                                          stdout=args.out,
                                          stderr=args.err,
-                                         shell=True,
                                          preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))
 
                     # The second Ctrl-C kill the subprocess
@@ -142,6 +145,14 @@ def run_task(gpu_info_file, args):
 
         except IOError as e:
             handle_io_error(e)
+
+
+def prepare_args(args):
+    result = []
+    for a in args.split('\n'):
+        if a != '':
+            result.extend(shlex.split(a))
+    return result
 
 
 def stop_subprocess(process, gpu_file, gpu_to_release):
@@ -201,7 +212,9 @@ def get_prefered_gpu(gpu_indices, prefered):
 
 def insert_portshift(task, task_id):
     port = 3600 + task_id * 100
-    return task.replace("__num__", str(port))
+    task.append("--port_shift")
+    task.append(str(port))
+    return task
 
 
 # decorators
