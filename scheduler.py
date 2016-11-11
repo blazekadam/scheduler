@@ -212,8 +212,7 @@ def get_prefered_gpu(gpu_indices, prefered):
 
 def insert_portshift(task, task_id):
     port = 3600 + task_id * 100
-    task.append("--port_shift")
-    task.append(str(port))
+    task = list(map(lambda v: str(port) if v == '__num__' else v, task))
     return task
 
 
