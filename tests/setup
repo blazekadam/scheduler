@@ -1,0 +1,30 @@
+--net_type cleavages
+
+--max_hours 60
+--min_hours 22
+--min_exp_hours 22
+--max_cc 5
+
+--normalize
+--equalize
+--rotation 360
+--flip
+--time_shift 0
+
+--input_size 120
+--lc_architecture "{'feature_maps':[64,64,128,64],'conv_sizes':[3,5,3,5],'pool_sizes':[2,1,2,1]}"
+--cnn_architecture "{'feature_maps':[32,32,32,20],'conv_sizes':[3,5,3,5],'pool_sizes':[1,2,1,1]}"
+--mlp_hidden_dim 512
+--rnn_dim 64
+--activation rect
+--lc_nums [3,9]
+
+--learning_rate 0.0001
+--batch_size 2
+
+--sliding_averages
+--long_average 100
+--short_average 50
+--save_freq 1
+
+--cnn_architecture "{'feature_maps':[32,32,32,666666666666],'conv_sizes':[3,5,3,5],'pool_sizes':[1,2,1,1]}"
