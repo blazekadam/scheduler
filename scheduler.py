@@ -86,8 +86,6 @@ def run_task(gpu_info_file, args):
                             if not is_waiting:
                                 is_waiting = True
                                 print("Scheduler (PID: {}) is waiting for GPU {}.".format(os.getpid(), args.forced_gpu))
-                            unlock_file(gpu_info_file)
-                            time.sleep(1)
                             continue
 
                     # select required count of free gpu, which will be passed to the task
@@ -138,7 +136,8 @@ def run_task(gpu_info_file, args):
                 # make sure the GPU is released even on interrupts
                 finally:
                     set_free_gpu(gpu_info_file, free_gpu)
-
+                    unlock_file(gpu_info_file)
+                    time.sleep(1)
             else:
                 unlock_file(gpu_info_file)
                 time.sleep(SEC_DELAY)
