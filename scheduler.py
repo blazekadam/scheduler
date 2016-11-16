@@ -76,10 +76,10 @@ def run_task(gpu_info_file, args):
             if len(free_gpu) >= args.gpu_count:
 
                 try:
-                    if args.prefered_gpu:
+                    if args.prefered_gpu is not None:
                         free_gpu = get_prefered_gpu(free_gpu, args.prefered_gpu)
 
-                    if args.forced_gpu:
+                    if args.forced_gpu is not None:
                         free_gpu = get_prefered_gpu(free_gpu, args.forced_gpu)
                         forced_gpu_free = check_forced_free(free_gpu, args.forced_gpu)
                         if not forced_gpu_free:
