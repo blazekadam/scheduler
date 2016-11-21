@@ -30,19 +30,3 @@ Show help with: `./scheduler.py -h`
 
  
 ~~~~
-
-## Usage
-
-1. Configure `gpu_info` file with `--init` option if needed (by default four free GPUs are created when you first run the scheduler).
-2. Go to the folder where your script is stored: `cd /file/with/task`.
-3. Run scheduler: e.g `../scheduler.py -t "test1.py -foo 1 -v --bar 0" --gpu_count 2`.
-
-## Notes
-
-* Scheduler uses just the `gpu_info` file (must be configured, see above) to store information about GPUs availability, so does not need access to GPUs driver.
-* Data from stdout and stderr are stored in the directory where scheduler was run (in directory named according current date).
-* Scheduler appends `--gpu` argument with allocated GPUs ID to the end of the task. e.g `test1.py -foo 1 -v --bar 0 --gpu 0 1`.
-
-## Examples
-
-See `./tests/run_tests` script.
