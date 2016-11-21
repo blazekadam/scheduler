@@ -66,7 +66,6 @@ def get_args():
 
 # main function
 def run_task(gpu_info_file, args):
-
     is_waiting = False
 
     while True:
@@ -111,7 +110,7 @@ def run_task(gpu_info_file, args):
                     p = subprocess.Popen(task,
                                          stdout=args.out,
                                          stderr=args.err,
-                                         preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))
+                                         preexec_fn=before_new_subprocess)
 
                     # The second Ctrl-C kill the subprocess
                     signal.signal(signal.SIGINT, lambda signum, frame: stop_subprocess(p, gpu_info_file, free_gpu))
@@ -119,7 +118,8 @@ def run_task(gpu_info_file, args):
                     set_additional_info(gpu_info_file, free_gpu, os.getlogin(), task,
                                         p.pid, get_formated_dt(dt_before), cuda)
 
-                    print("SCH PID: {}\nTASK PID: {}\nGPU: {}".format(os.getpid(), p.pid, cuda))
+                    print("GPU: {}\nSCH PID: {}\nTASK PID: {}".format(cuda, os.getpid(), p.pid))
+                    print("SCH PGID: {}\nTASK PGID: {}".format(os.getpgid(os.getpid()), os.getpgid(p.pid)))
                     p.wait()
 
                     dt_after = datetime.datetime.now()
@@ -146,6 +146,11 @@ def run_task(gpu_info_file, args):
             handle_io_error(e)
 
 
+def before_new_subprocess():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    os.setsid()
+
+
 def prepare_args(args):
     result = []
     for a in args.split('\n'):
@@ -156,11 +161,11 @@ def prepare_args(args):
 
 def stop_subprocess(process, gpu_file, gpu_to_release):
     """
-    This function take care of the Ctrl-C signal.
+    This function take care of the Ctrl-C (SIGINT) signal.
     On the first Ctrl-C the warning is printed.
     On the second Ctrl-C the task is terminated.
     On the third Ctrl-C the task is killed.
-    Delay between terminate and kill is 5 seconds.
+    Delay between terminate and kill is specified in KILL_DELAY_SEC.
     """
     def allow_kill_task():
         global TASK_SIGNAL
@@ -175,24 +180,24 @@ def stop_subprocess(process, gpu_file, gpu_to_release):
     global TASK_SIGNAL
 
     if TASK_SIGNAL is KILL:
-        print("\nThe task (PID: {}) was killed.".format(process.pid))
+        pgid = os.getpgid(process.pid)
+        print("\nThe task (PGID: {}) was killed.".format(pgid))
         set_free_gpu(gpu_file, gpu_to_release)
-        pgrp = os.getpgid(process.pid)
-        os.killpg(pgrp, signal.SIGKILL)
+        os.killpg(pgid, signal.SIGKILL)
+        TASK_SIGNAL = None
 
-    # currently this branch is not used, in future, create new process group
-    # for the subprocess
     elif TASK_SIGNAL is TERMINATE:
-        print("\nThe task (PID: {}) was terminated.".format(process.pid))
+        pgid = os.getpgid(process.pid)
+        print("\nThe task (PGID: {}) was terminated.".format(pgid))
         set_free_gpu(gpu_file, gpu_to_release)
-        pgrp = os.getpgid(process.pid)
-        os.killpg(pgrp, signal.SIGTERM)
+        os.killpg(pgid, signal.SIGTERM)
         check_process_liveness(process, KILL_DELAY_SEC)
         TASK_SIGNAL = None
 
     elif TASK_SIGNAL is WARN:
-        print("\nNext Ctrl-C kill the task (PID: {}).".format(process.pid))
-        TASK_SIGNAL = KILL
+        pgid = os.getpgid(process.pid)
+        print("\nNext Ctrl-C terminate the task (PGID: {}).".format(pgid))
+        TASK_SIGNAL = TERMINATE
 
 
 def check_forced_free(gpu_indices, forced):
