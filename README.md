@@ -2,7 +2,7 @@
 
 Scheduler is a tool for effective training Machine Learning models on multiple GPUs. 
 
-Scheduler uses the file `gpu_scheduler_info` which is stored in /tmp/ and stores the global state about GPUs. This file is automatically created on a first start and by default is initialized for four GPU (it can be change with --init option). When a particular task is assigned to some GPU, a global variable GPU is set to `cuda[number of assigned GPU]` and this GPU is blocked until the task finishes.
+Scheduler uses the file `gpu_scheduler_info` which is stored in /tmp/ and stores the global state about GPUs. This file is automatically created on a first start and by default is initialized for four GPU (it can be change with --init option). When a particular task is assigned to some GPU, a global variable GPU is set to `cuda[id of assigned GPU]` and this GPU is blocked until the task finishes.
 
 ## Requirements
 
