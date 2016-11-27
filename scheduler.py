@@ -190,7 +190,11 @@ def stop_subprocess(process, gpu_file, gpu_to_release):
         pgid = os.getpgid(process.pid)
         print("\nThe task (PGID: {}) was terminated.".format(pgid))
         set_free_gpu(gpu_file, gpu_to_release)
+
         os.killpg(pgid, signal.SIGTERM)
+        # send a second SIGTERM because of blocks
+        os.killpg(pgid, signal.SIGTERM)
+
         check_process_liveness(process, KILL_DELAY_SEC)
         TASK_SIGNAL = None
 
