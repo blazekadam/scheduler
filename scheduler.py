@@ -18,7 +18,7 @@ SEC_DELAY = 3
 PATH = "/tmp/"
 GPU_INFO_FILE = os.path.join(PATH, "gpu_scheduler_info")
 DEFAULT_GPU_COUNT = 4
-KILL_DELAY_SEC = 5
+KILL_DELAY_SEC = 3
 
 # CONSTANTS - Data keys
 GPU_AVAIL = 'avail'
