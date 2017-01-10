@@ -385,6 +385,7 @@ if __name__ == '__main__':
 
     with open(GPU_INFO_FILE, mode) as f:
         if need_init_gpuf:
+            os.fchmod(f.fileno(), 0o777)
             init_gpu_info_file(f, DEFAULT_GPU_COUNT, [])
 
         # parse cli args
