@@ -1,22 +1,20 @@
 #!/usr/bin/python3
 
-import argparse
-import json
-import time
-import subprocess
-import fcntl
-import errno
-import datetime
 import os
 import sys
+import time
+import json
+import fcntl
+import errno
 import signal
+import argparse
+import datetime
 import threading
+import subprocess
 
 # CONSTANTS - Scheduler settings
 SEC_DELAY = 3
-PATH = "/tmp/"
-GPU_INFO_FILE = os.path.join(PATH, "gpu_scheduler_info")
-DEFAULT_GPU_COUNT = 4
+GPU_INFO_FILE = os.path.join('/tmp', "gpu_scheduler_info")
 KILL_DELAY_SEC = 3
 
 # CONSTANTS - Data keys
@@ -38,23 +36,24 @@ TASK_SIGNAL = TERMINATE
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-gc", "--gpu_count", type=int, default=1,
-                        help="The count of required GPUs for specified task.")
-    parser.add_argument("-i", "--init", nargs="+", type=int,
-                        help="""Initializes gpu info file. List of numbers is expected,
-                        where first number is total count of GPUs and the rest of the numbers denotes unavailable GPUs.
-                        e.g -i 5 3 4 means that total count of GPUs is 5 and GPU 3 and 4 are currently unavailable.""")
-    parser.add_argument("-pg", "--prefered_gpu", type=int,
-                        help="If possible, prefered GPU is assigned to the task, otherwise is assigned random free GPU.")
-    parser.add_argument("-fg", "--forced_gpu", type=int,
-                        help="Wait until specified GPU is free.")
-    parser.add_argument("-s", "--status", action='store_true',
-                        help="Show info about GPU usage - user/GPU/taskPID/start")
-    parser.add_argument("-rg", "--release_gpu", type=int, nargs='+',
-                        help="Releases GPUs according their indices. e.g -rg 0 2 will release GPU 0 and 2.")
-    parser.add_argument("task", nargs='+',
-                        help="The quoted task with arguments which will be started on free GPUs as soon as possible.")
+    parser.add_argument("-i", "--init", type=int, help="The number of available GPUs.")
+    parser.add_argument("-n", "--num", type=int, default=1, help="The number of required GPUs.")
+    parser.add_argument("-p", "--prefer", type=str, help="Instruct the scheduler to prefer the specified GPU(s).")
+    parser.add_argument("-f", "--force", type=str, help="Force the scheduler to use the specified GPU(s).")
+    parser.add_argument("-s", "--status", action='store_true', help="Show GPU usage status (user/GPU/taskPID/start)")
+    parser.add_argument("-r", "--release", type=int, nargs='+', help="Releases the specified GPU(s).")
+    parser.add_argument("--cx", action='store_true', help="Append model.n_gpus=[NUM] to the task args.")
+    parser.add_argument("task", nargs='*', help="The task to run as soon as the required GPUs are available.")
     return parser.parse_args()
+
+
+def sanitize_arg(arg):
+
+    sanitized = json.loads(arg)
+    if isinstance(sanitized, int):
+        sanitized = [sanitized]
+
+    return sanitized
 
 
 # main function
@@ -64,46 +63,47 @@ def run_task(gpu_info_file, args):
     while True:
         try:
             lock_file(gpu_info_file)
-            free_gpu = get_free_gpu(gpu_info_file)
-            if len(free_gpu) >= args.gpu_count:
-
+            free_gpus = get_free_gpus(gpu_info_file)
+            if len(free_gpus) >= args.num:
                 try:
-                    if args.prefered_gpu is not None:
-                        free_gpu = get_prefered_gpu(free_gpu, args.prefered_gpu)
+                    if args.prefer is not None:
+                        free_gpus = get_preferred_gpu(free_gpus, sanitize_arg(args.prefer))
 
-                    if args.forced_gpu is not None:
-                        free_gpu = get_prefered_gpu(free_gpu, args.forced_gpu)
-                        forced_gpu_free = check_forced_free(free_gpu, args.forced_gpu)
+                    if args.force is not None:
+                        forced_gpus = sanitize_arg(args.force)
+                        free_gpus = get_preferred_gpu(free_gpus, forced_gpus)
+                        forced_gpu_free = check_forced_free(free_gpus, forced_gpus)
                         if not forced_gpu_free:
                             if not is_waiting:
                                 is_waiting = True
-                                print("Scheduler (PID: {}) is waiting for GPU {}.".format(os.getpid(), args.forced_gpu))
+                                print("Scheduler (PID: {}) is waiting for GPU(s) {}.".format(os.getpid(), args.force))
                             continue
 
                     # select required count of free gpu, which will be passed to the task
-                    free_gpu = free_gpu[0:args.gpu_count]
+                    gpus = free_gpus[0:args.num]
 
                     # lock used gpu
-                    set_occupied_gpu(gpu_info_file, free_gpu)
+                    set_occupied_gpu(gpu_info_file, gpus)
 
                     unlock_file(gpu_info_file)
 
                     # set enviromental variable CUDA_VISIBLE_DEVICES to comma separated list of GPU IDs
-                    visible_devices = set_env_vars(free_gpu)
+                    visible_devices = set_env_vars(gpus)
 
                     dt_before = datetime.datetime.now()
 
                     task = args.task
 
                     # run required task
-                    p = subprocess.Popen(task,
-                                         preexec_fn=before_new_subprocess)
+                    if args.cx:
+                        task.append('model.n_gpus={}'.format(len(gpus)))
+                    p = subprocess.Popen(task, preexec_fn=before_new_subprocess)
 
                     # The second Ctrl-C kill the subprocess
-                    signal.signal(signal.SIGINT, lambda signum, frame: stop_subprocess(p, gpu_info_file, free_gpu))
+                    signal.signal(signal.SIGINT, lambda signum, frame: stop_subprocess(p, gpu_info_file, gpus))
 
-                    set_additional_info(gpu_info_file, free_gpu, os.getlogin(), task,
-                                        p.pid, get_formated_dt(dt_before), visible_devices)
+                    set_additional_info(gpu_info_file, gpus, os.getlogin(), task, p.pid,
+                                        get_formated_dt(dt_before), visible_devices)
 
                     print("GPU: {}\nSCH PID: {}\nTASK PID: {}".format(visible_devices, os.getpid(), p.pid))
                     print("SCH PGID: {}\nTASK PGID: {}".format(os.getpgid(os.getpid()), os.getpgid(p.pid)))
@@ -111,16 +111,15 @@ def run_task(gpu_info_file, args):
 
                     dt_after = datetime.datetime.now()
 
-                    print("\ntask: {}\nstdout: {}\nstderr: {}\nstart: {}\nend: {}\ntotal time: {}\n".format(
-                        task, args.out.name, args.err.name,
-                        get_formated_dt(dt_before), get_formated_dt(dt_after),
-                        get_time_duration(dt_before, dt_after)))
+                    print("\ntask: {}\nstart: {}\nend: {}\ntotal time: {}\n".format(
+                          task, get_formated_dt(dt_before), get_formated_dt(dt_after),
+                          get_time_duration(dt_before, dt_after)))
 
                     break
 
                 # make sure the GPU is released even on interrupts
                 finally:
-                    set_free_gpu(gpu_info_file, free_gpu)
+                    set_free_gpu(gpu_info_file, free_gpus)
                     unlock_file(gpu_info_file)
                     time.sleep(1)
             else:
@@ -183,15 +182,16 @@ def stop_subprocess(process, gpu_file, gpu_to_release):
 
 def check_forced_free(gpu_indices, forced):
     if gpu_indices:
-        return gpu_indices[0] == forced
+        return set(gpu_indices[:len(forced)]) == set(forced)
     return False
 
 
-def get_prefered_gpu(gpu_indices, prefered):
-    """Move prefered GPU on a first position if it is available."""
-    if prefered in gpu_indices:
-        gpu_indices.remove(prefered)
-        return [prefered, ] + gpu_indices
+def get_preferred_gpu(gpu_indices, preferred):
+    """Move preferred GPU on a first position if it is available."""
+    for gpu in reversed(preferred):
+        if gpu in gpu_indices:
+            gpu_indices.remove(gpu)
+            gpu_indices = [gpu, ] + gpu_indices
     return gpu_indices
 
 
@@ -220,27 +220,23 @@ def seek_to_start(func):
 
 @access_gpu_file
 @seek_to_start
-def init_gpu_info_file(f, gpu_count, occupied_gpu):
-    """
-    occupied_gpu - indices of GPUs which currently are not available
-    gpu_count - total count of GPUs on a system
-    """
-    gpu_states = [False if i in occupied_gpu else True for i in range(gpu_count)]
-    f.truncate()
+def init_gpu_info_file(file, gpu_count):
+    file.truncate()
+
     data = {}
-    data[GPU_AVAIL] = gpu_states
-    init_to_none = lambda c: c * [None]
-    data[GPU_USER] = init_to_none(gpu_count)
-    data[GPU_TASK] = init_to_none(gpu_count)
-    data[GPU_TASK_PID] = init_to_none(gpu_count)
-    data[GPU_TASK_START] = init_to_none(gpu_count)
-    data[GPU_NAME] = init_to_none(gpu_count)
-    json.dump(data, f, indent=4, sort_keys=True)
+    data[GPU_AVAIL] = [True]*gpu_count
+    data[GPU_USER] = [None]*gpu_count
+    data[GPU_TASK] = [None]*gpu_count
+    data[GPU_TASK_PID] = [None]*gpu_count
+    data[GPU_TASK_START] = [None]*gpu_count
+    data[GPU_NAME] = [None]*gpu_count
+
+    json.dump(data, file, indent=4, sort_keys=True)
 
 
 @seek_to_start
-def get_free_gpu(gpu_info_file):
-    "Returns list of GPU indices which are available."
+def get_free_gpus(gpu_info_file):
+    """"Returns list of GPU indices which are available."""
     gpu_states = json.load(gpu_info_file)[GPU_AVAIL]
     return [i for i, avail in enumerate(gpu_states) if avail]
 
@@ -344,24 +340,19 @@ def display_status(f):
 # run scheduler
 if __name__ == '__main__':
 
-    mode = 'r+'
-    need_init_gpuf = not(os.path.isfile(GPU_INFO_FILE))
-    if need_init_gpuf:
-        mode = 'w+'
+    args = get_args()
+    init = not(os.path.isfile(GPU_INFO_FILE))
+    if init and not args.init:
+        print('The scheduler needs to be initializes with --init arg first.')
+        sys.exit(1)
 
-    with open(GPU_INFO_FILE, mode) as f:
-        if need_init_gpuf:
+    with open(GPU_INFO_FILE, 'w+' if init else 'r+') as f:
+        if init:
             os.fchmod(f.fileno(), 0o777)
-            init_gpu_info_file(f, DEFAULT_GPU_COUNT, [])
+            init_gpu_info_file(f, args.init)
 
-        # parse cli args
-        args = get_args()
-
-        if args.init:
-            init_gpu_info_file(f, args.init[0], args.init[1:])
-
-        if args.release_gpu:
-            set_free_gpu(f, args.release_gpu)
+        if args.release:
+            set_free_gpu(f, args.release)
 
         if args.status:
             display_status(f)
