@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 
 import argparse
 import json
@@ -11,7 +11,6 @@ import os
 import sys
 import signal
 import threading
-import shlex
 
 # CONSTANTS - Scheduler settings
 SEC_DELAY = 3
@@ -34,7 +33,7 @@ TERMINATE = 1
 WARN = 2
 
 # GLOBAL VARIABLES
-TASK_SIGNAL = WARN
+TASK_SIGNAL = TERMINATE
 
 
 def get_args():
@@ -45,12 +44,6 @@ def get_args():
                         help="""Initializes gpu info file. List of numbers is expected,
                         where first number is total count of GPUs and the rest of the numbers denotes unavailable GPUs.
                         e.g -i 5 3 4 means that total count of GPUs is 5 and GPU 3 and 4 are currently unavailable.""")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Prints info about the process, when the task is completed.")
-    parser.add_argument("-o", "--out", nargs="?", type=argparse.FileType('w'), default=sys.stdout,
-                        help="The name of the file, which will be used to store stdout. The default file is sys.stdout.")
-    parser.add_argument("-e", "--err", nargs="?", type=argparse.FileType('w'), default=sys.stderr,
-                        help="The name of the file, which will be used to store stderr. The default file is sys.stderr.")
     parser.add_argument("-pg", "--prefered_gpu", type=int,
                         help="If possible, prefered GPU is assigned to the task, otherwise is assigned random free GPU.")
     parser.add_argument("-fg", "--forced_gpu", type=int,
@@ -59,7 +52,7 @@ def get_args():
                         help="Show info about GPU usage - user/GPU/taskPID/start")
     parser.add_argument("-rg", "--release_gpu", type=int, nargs='+',
                         help="Releases GPUs according their indices. e.g -rg 0 2 will release GPU 0 and 2.")
-    parser.add_argument("task", nargs='?',
+    parser.add_argument("task", nargs='+',
                         help="The quoted task with arguments which will be started on free GPUs as soon as possible.")
     return parser.parse_args()
 
@@ -95,41 +88,33 @@ def run_task(gpu_info_file, args):
 
                     unlock_file(gpu_info_file)
 
-                    # set enviromental variable GPU to cuda[index of allocated GPU]
-                    cuda = set_env_vars(free_gpu)
+                    # set enviromental variable CUDA_VISIBLE_DEVICES to comma separated list of GPU IDs
+                    visible_devices = set_env_vars(free_gpu)
 
                     dt_before = datetime.datetime.now()
 
-                    # parse string of args to list
-                    task = prepare_args(args.task)
-
-                    # replace char '#' with port number
-                    task = insert_portshift(task, free_gpu[0])
+                    task = args.task
 
                     # run required task
                     p = subprocess.Popen(task,
-                                         stdout=args.out,
-                                         stderr=args.err,
                                          preexec_fn=before_new_subprocess)
 
                     # The second Ctrl-C kill the subprocess
                     signal.signal(signal.SIGINT, lambda signum, frame: stop_subprocess(p, gpu_info_file, free_gpu))
 
                     set_additional_info(gpu_info_file, free_gpu, os.getlogin(), task,
-                                        p.pid, get_formated_dt(dt_before), cuda)
+                                        p.pid, get_formated_dt(dt_before), visible_devices)
 
-                    print("GPU: {}\nSCH PID: {}\nTASK PID: {}".format(cuda, os.getpid(), p.pid))
+                    print("GPU: {}\nSCH PID: {}\nTASK PID: {}".format(visible_devices, os.getpid(), p.pid))
                     print("SCH PGID: {}\nTASK PGID: {}".format(os.getpgid(os.getpid()), os.getpgid(p.pid)))
                     p.wait()
 
                     dt_after = datetime.datetime.now()
 
-                    # info message
-                    if args.verbose:
-                        print("\ntask: {}\nstdout: {}\nstderr: {}\nstart: {}\nend: {}\ntotal time: {}\n".format(
-                            task, args.out.name, args.err.name,
-                            get_formated_dt(dt_before), get_formated_dt(dt_after),
-                            get_time_duration(dt_before, dt_after)))
+                    print("\ntask: {}\nstdout: {}\nstderr: {}\nstart: {}\nend: {}\ntotal time: {}\n".format(
+                        task, args.out.name, args.err.name,
+                        get_formated_dt(dt_before), get_formated_dt(dt_after),
+                        get_time_duration(dt_before, dt_after)))
 
                     break
 
@@ -149,14 +134,6 @@ def run_task(gpu_info_file, args):
 def before_new_subprocess():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     os.setsid()
-
-
-def prepare_args(args):
-    result = []
-    for a in args.split('\n'):
-        if a != '':
-            result.extend(shlex.split(a))
-    return result
 
 
 def stop_subprocess(process, gpu_file, gpu_to_release):
@@ -216,12 +193,6 @@ def get_prefered_gpu(gpu_indices, prefered):
         gpu_indices.remove(prefered)
         return [prefered, ] + gpu_indices
     return gpu_indices
-
-
-def insert_portshift(task, task_id):
-    port = 3600 + task_id * 100
-    task = list(map(lambda v: str(port) if v == '__num__' else v, task))
-    return task
 
 
 # decorators
@@ -342,15 +313,9 @@ def handle_io_error(e):
 def set_env_vars(gpu_indices):
     """Sets enviromental variable GPU"""
     # currently is cupported just one gpu on task
-    cuda = "cuda{}".format(gpu_indices[0])
-    os.environ['GPU'] = cuda
-    return cuda
-
-
-def validate_args(args):
-    if args.gpu_count != 1:
-        print("Usage of multiple GPUs isn't supported yet. You must use just the one GPU for the task.")
-        sys.exit(1)
+    visible_devices = ",".join([str(i) for i in gpu_indices])
+    os.environ['CUDA_VISIBLE_DEVICES'] = visible_devices
+    return visible_devices
 
 
 @seek_to_start
@@ -375,6 +340,7 @@ def display_status(f):
     else:
         print("No GPU available.")
 
+
 # run scheduler
 if __name__ == '__main__':
 
@@ -390,7 +356,6 @@ if __name__ == '__main__':
 
         # parse cli args
         args = get_args()
-        validate_args(args)
 
         if args.init:
             init_gpu_info_file(f, args.init[0], args.init[1:])
