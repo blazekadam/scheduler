@@ -1,9 +1,9 @@
 # **TensorFlow training scheduler**
 
-TT scheduler is a simple tool facilitating effective GPU utilization for local TensorFlow training in multi-GPU environment.
+TT scheduler is a simple tool facilitating effective GPU utilization for TensorFlow training(s) in local multi-GPU environment.
 
 - auto `CUDA_VISIBLE_DEVICES` masking
-- schedule arbitrary number of training in advance
+- schedule arbitrary number of trainings in advance
 - simple command line usage
 
 ## Quick start
