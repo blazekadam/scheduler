@@ -1,4 +1,4 @@
-# **Tensorflow training scheduler**
+# **TensorFlow training scheduler**
 
 TT scheduler is a simple tool facilitating effective GPU utilization for local TensorFlow training in multi-GPU environment.
 
