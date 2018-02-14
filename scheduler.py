@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import os
+import pwd
 import sys
 import time
 import json
@@ -102,7 +103,7 @@ def run_task(gpu_info_file, args):
                     # The second Ctrl-C kill the subprocess
                     signal.signal(signal.SIGINT, lambda signum, frame: stop_subprocess(p, gpu_info_file, gpus))
 
-                    set_additional_info(gpu_info_file, gpus, os.getlogin(), task, p.pid,
+                    set_additional_info(gpu_info_file, gpus,  pwd.getpwuid(os.getuid())[0], task, p.pid,
                                         get_formated_dt(dt_before), visible_devices)
 
                     print("GPU: {}\nSCH PID: {}\nTASK PID: {}".format(visible_devices, os.getpid(), p.pid))
