@@ -65,6 +65,7 @@ def run_task(gpu_info_file, args):
         try:
             lock_file(gpu_info_file)
             free_gpus = get_free_gpus(gpu_info_file)
+            gpus = []
             if len(free_gpus) >= args.num:
                 try:
                     if args.prefer is not None:
@@ -120,7 +121,7 @@ def run_task(gpu_info_file, args):
 
                 # make sure the GPU is released even on interrupts
                 finally:
-                    set_free_gpu(gpu_info_file, free_gpus)
+                    set_free_gpu(gpu_info_file, gpus)
                     unlock_file(gpu_info_file)
                     time.sleep(1)
             else:
